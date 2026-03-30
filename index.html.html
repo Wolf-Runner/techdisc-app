@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>TechDisc BLE Explorer</title>
+<style>
+  :root {
+    --bg: #0f0f0f;
+    --surface: #1a1a1a;
+    --surface2: #242424;
+    --border: #333;
+    --text: #e8e8e8;
+    --muted: #888;
+    --accent: #3b82f6;
+    --accent-dim: #1d4ed8;
+    --green: #22c55e;
+    --amber: #f59e0b;
+    --red: #ef4444;
+    --mono: 'Courier New', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 15px;
+    min-height: 100vh;
+  }
+  header {
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  .disc-icon {
+    width: 36px; height: 36px;
+    background: var(--accent);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  header h1 { font-size: 17px; font-weight: 600; }
+  header p { font-size: 12px; color: var(--muted); }
+
+  .status-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    background: var(--surface2);
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--muted);
+    flex-shrink: 0;
+  }
+  .dot.connected { background: var(--green); }
+  .dot.scanning { background: var(--amber); animation: pulse 1s infinite; }
+  .dot.error { background: var(--red); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  .controls {
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .btn {
+    padding: 13px 20px;
+    border-radius: 10px;
+    border: none;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    width: 100%;
+    transition: opacity 0.15s;
+  }
+  .btn:active { opacity: 0.8; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-danger { background: var(--red); color: #fff; }
+  .btn-secondary { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+  .btn-success { background: var(--green); color: #000; }
+
+  .btn-row { display: flex; gap: 10px; }
+  .btn-row .btn { flex: 1; }
+
+  section {
+    margin: 0 16px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .section-title {
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface2);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .badge {
+    background: var(--accent-dim);
+    color: #fff;
+    font-size: 11px;
+    padding: 2px 7px;
+    border-radius: 20px;
+    font-weight: 700;
+  }
+
+  .service-item {
+    border-bottom: 1px solid var(--border);
+    padding: 10px 14px;
+  }
+  .service-item:last-child { border-bottom: none; }
+  .service-uuid {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    word-break: break-all;
+  }
+  .service-label {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .char-list { margin-top: 8px; padding-left: 10px; }
+  .char-item {
+    padding: 6px 0;
+    border-top: 1px solid var(--border);
+  }
+  .char-uuid {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    word-break: break-all;
+  }
+  .char-props {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+  }
+  .prop-tag {
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+  }
+  .prop-notify { background: #14532d; color: #86efac; }
+  .prop-read   { background: #1e3a5f; color: #93c5fd; }
+  .prop-write  { background: #451a03; color: #fed7aa; }
+  .prop-indicate { background: #3b0764; color: #d8b4fe; }
+  .char-value {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--green);
+    margin-top: 4px;
+    word-break: break-all;
+    background: #0a1a0a;
+    padding: 4px 6px;
+    border-radius: 6px;
+    display: none;
+  }
+  .char-value.has-data { display: block; }
+  .sub-btn {
+    margin-top: 6px;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface2);
+    color: var(--text);
+    cursor: pointer;
+  }
+  .sub-btn.active { border-color: var(--green); color: var(--green); }
+
+  #log-box {
+    font-family: var(--mono);
+    font-size: 12px;
+    padding: 10px 14px;
+    max-height: 320px;
+    overflow-y: auto;
+    line-height: 1.7;
+  }
+  .log-line { color: var(--muted); }
+  .log-line.info { color: var(--text); }
+  .log-line.data { color: var(--green); }
+  .log-line.warn { color: var(--amber); }
+  .log-line.err  { color: var(--red); }
+
+  #throw-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1px;
+    background: var(--border);
+  }
+  .metric-cell {
+    background: var(--surface);
+    padding: 12px 10px;
+    text-align: center;
+  }
+  .metric-label {
+    font-size: 10px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-bottom: 4px;
+  }
+  .metric-val {
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--accent);
+  }
+  .metric-unit {
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  #export-section { padding: 16px; }
+  .empty-state {
+    padding: 20px 14px;
+    color: var(--muted);
+    font-size: 13px;
+    text-align: center;
+  }
+
+  #ble-warning {
+    margin: 16px;
+    background: #2d1500;
+    border: 1px solid #92400e;
+    border-radius: 10px;
+    padding: 14px;
+    font-size: 13px;
+    color: #fbbf24;
+    display: none;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="disc-icon">&#x25CF;</div>
+  <div>
+    <h1>TechDisc BLE Explorer</h1>
+    <p>Offline &mdash; no data leaves your phone</p>
+  </div>
+</header>
+
+<div class="status-bar">
+  <div class="dot" id="status-dot"></div>
+  <span id="status-text">Not connected</span>
+</div>
+
+<div id="ble-warning">
+  Web Bluetooth is not available. Open this page in <strong>Chrome</strong> on Android and make sure Bluetooth is enabled.
+</div>
+
+<div class="controls">
+  <button class="btn btn-primary" id="btn-scan" onclick="startScan()">Scan for TechDisc</button>
+  <div class="btn-row">
+    <button class="btn btn-secondary" id="btn-disconnect" onclick="disconnect()" disabled>Disconnect</button>
+    <button class="btn btn-success" id="btn-sub-all" onclick="subscribeAll()" disabled>Subscribe All</button>
+  </div>
+</div>
+
+<section id="services-section" style="display:none;">
+  <div class="section-title">
+    <span>BLE Services &amp; Characteristics</span>
+    <span class="badge" id="svc-count">0</span>
+  </div>
+  <div id="services-list"></div>
+</section>
+
+<section>
+  <div class="section-title">
+    <span>Throw Metrics (decoded)</span>
+  </div>
+  <div id="throw-grid">
+    <div class="metric-cell"><div class="metric-label">Speed</div><div class="metric-val" id="m-speed">--</div><div class="metric-unit">mph</div></div>
+    <div class="metric-cell"><div class="metric-label">Spin</div><div class="metric-val" id="m-spin">--</div><div class="metric-unit">rpm</div></div>
+    <div class="metric-cell"><div class="metric-label">Wobble</div><div class="metric-val" id="m-wobble">--</div><div class="metric-unit">deg</div></div>
+    <div class="metric-cell"><div class="metric-label">Hyzer</div><div class="metric-val" id="m-hyzer">--</div><div class="metric-unit">deg</div></div>
+    <div class="metric-cell"><div class="metric-label">Nose</div><div class="metric-val" id="m-nose">--</div><div class="metric-unit">deg</div></div>
+    <div class="metric-cell"><div class="metric-label">Launch</div><div class="metric-val" id="m-launch">--</div><div class="metric-unit">deg</div></div>
+  </div>
+</section>
+
+<section>
+  <div class="section-title">
+    <span>Raw Data Log</span>
+    <span class="badge" id="log-count">0</span>
+  </div>
+  <div id="log-box"><div class="empty-state">Waiting for connection...</div></div>
+</section>
+
+<div id="export-section">
+  <div class="btn-row">
+    <button class="btn btn-secondary" onclick="exportLog()">Export Log (JSON)</button>
+    <button class="btn btn-secondary" onclick="exportCSV()">Export CSV</button>
+  </div>
+  <button class="btn btn-secondary" style="margin-top:10px;" onclick="clearLog()">Clear Log</button>
+</div>
+
+<script>
+let device = null;
+let server = null;
+let logEntries = [];
+let logLineCount = 0;
+let subscriptions = [];
+
+const KNOWN_SERVICES = {
+  '0000180a-0000-1000-8000-00805f9b34fb': 'Device Information',
+  '0000180f-0000-1000-8000-00805f9b34fb': 'Battery Service',
+  '00001800-0000-1000-8000-00805f9b34fb': 'Generic Access',
+  '00001801-0000-1000-8000-00805f9b34fb': 'Generic Attribute',
+};
+const KNOWN_CHARS = {
+  '00002a00-0000-1000-8000-00805f9b34fb': 'Device Name',
+  '00002a01-0000-1000-8000-00805f9b34fb': 'Appearance',
+  '00002a04-0000-1000-8000-00805f9b34fb': 'Connection Params',
+  '00002a19-0000-1000-8000-00805f9b34fb': 'Battery Level',
+  '00002a24-0000-1000-8000-00805f9b34fb': 'Model Number',
+  '00002a25-0000-1000-8000-00805f9b34fb': 'Serial Number',
+  '00002a26-0000-1000-8000-00805f9b34fb': 'Firmware Rev',
+  '00002a27-0000-1000-8000-00805f9b34fb': 'Hardware Rev',
+  '00002a29-0000-1000-8000-00805f9b34fb': 'Manufacturer',
+};
+
+function setStatus(state, text) {
+  const dot = document.getElementById('status-dot');
+  dot.className = 'dot ' + state;
+  document.getElementById('status-text').textContent = text;
+}
+
+function log(msg, type='info') {
+  const ts = new Date().toTimeString().split(' ')[0];
+  const entry = { ts, msg, type };
+  logEntries.push(entry);
+  logLineCount++;
+  document.getElementById('log-count').textContent = logLineCount;
+
+  const box = document.getElementById('log-box');
+  if (box.querySelector('.empty-state')) box.innerHTML = '';
+
+  const line = document.createElement('div');
+  line.className = 'log-line ' + type;
+  line.textContent = `[${ts}] ${msg}`;
+  box.appendChild(line);
+  box.scrollTop = box.scrollHeight;
+}
+
+function bufToHex(buf) {
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join(' ');
+}
+function bufToInts(buf) {
+  return Array.from(new Uint8Array(buf)).join(', ');
+}
+function bufToFloat32s(buf) {
+  const dv = new DataView(buf);
+  const out = [];
+  for(let i=0; i+3<buf.byteLength; i+=4) {
+    out.push(dv.getFloat32(i, true).toFixed(2));
+  }
+  return out.join(', ');
+}
+function bufToInt16s(buf) {
+  const dv = new DataView(buf);
+  const out = [];
+  for(let i=0; i+1<buf.byteLength; i+=2) {
+    out.push(dv.getInt16(i, true));
+  }
+  return out.join(', ');
+}
+
+async function startScan() {
+  if (!navigator.bluetooth) {
+    document.getElementById('ble-warning').style.display = 'block';
+    return;
+  }
+  try {
+    setStatus('scanning', 'Scanning...');
+    log('Requesting BLE device — select your TechDisc from the popup', 'warn');
+    document.getElementById('btn-scan').disabled = true;
+
+    device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: [
+        'battery_service',
+        'device_information',
+        'generic_access',
+        'generic_attribute',
+        '0000ffe0-0000-1000-8000-00805f9b34fb',
+        '0000fff0-0000-1000-8000-00805f9b34fb',
+        '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
+        '12345678-1234-5678-1234-56789abcdef0',
+      ]
+    });
+
+    log(`Found device: ${device.name || '(unnamed)'} [${device.id}]`);
+    device.addEventListener('gattserverdisconnected', onDisconnected);
+
+    log('Connecting to GATT server...', 'warn');
+    server = await device.gatt.connect();
+    log('Connected!', 'data');
+    setStatus('connected', `Connected: ${device.name || 'TechDisc'}`);
+
+    document.getElementById('btn-disconnect').disabled = false;
+    document.getElementById('btn-sub-all').disabled = false;
+
+    await discoverAll();
+
+  } catch(e) {
+    log('Error: ' + e.message, 'err');
+    setStatus('error', 'Error — see log');
+    document.getElementById('btn-scan').disabled = false;
+  }
+}
+
+async function discoverAll() {
+  log('Discovering all services...', 'warn');
+  let services;
+  try {
+    services = await server.getPrimaryServices();
+  } catch(e) {
+    log('Could not get primary services: ' + e.message, 'err');
+    return;
+  }
+
+  const section = document.getElementById('services-section');
+  section.style.display = 'block';
+  const list = document.getElementById('services-list');
+  list.innerHTML = '';
+  document.getElementById('svc-count').textContent = services.length;
+
+  log(`Found ${services.length} service(s)`, 'data');
+
+  for (const svc of services) {
+    const uuid = svc.uuid;
+    const name = KNOWN_SERVICES[uuid] || 'Custom/Unknown';
+    log(`Service: ${name} | ${uuid}`);
+
+    const svcDiv = document.createElement('div');
+    svcDiv.className = 'service-item';
+    svcDiv.innerHTML = `<div class="service-label">${name}</div><div class="service-uuid">${uuid}</div><div class="char-list" id="chars-${uuid.replace(/-/g,'_')}"></div>`;
+    list.appendChild(svcDiv);
+
+    let chars;
+    try {
+      chars = await svc.getCharacteristics();
+    } catch(e) {
+      log(`  Could not read characteristics: ${e.message}`, 'err');
+      continue;
+    }
+
+    const charList = document.getElementById(`chars-${uuid.replace(/-/g,'_')}`);
+
+    for (const ch of chars) {
+      const cuuid = ch.uuid;
+      const cname = KNOWN_CHARS[cuuid] || 'Custom';
+      const props = ch.properties;
+      const propLabels = [];
+      if(props.notify) propLabels.push({label:'NOTIFY', cls:'prop-notify'});
+      if(props.indicate) propLabels.push({label:'INDICATE', cls:'prop-indicate'});
+      if(props.read) propLabels.push({label:'READ', cls:'prop-read'});
+      if(props.write || props.writeWithoutResponse) propLabels.push({label:'WRITE', cls:'prop-write'});
+
+      log(`  Char: ${cname} | ${cuuid} | props: ${propLabels.map(p=>p.label).join(', ')}`);
+
+      const safeId = cuuid.replace(/-/g,'_');
+      const propsHtml = propLabels.map(p=>`<span class="prop-tag ${p.cls}">${p.label}</span>`).join('');
+      const subBtn = (props.notify || props.indicate)
+        ? `<button class="sub-btn" id="sub-${safeId}" onclick="toggleNotify('${cuuid}', '${svc.uuid}', this)">Subscribe</button>` : '';
+
+      let readVal = '';
+      if(props.read) {
+        try {
+          const val = await ch.readValue();
+          const hex = bufToHex(val.buffer);
+          const txt = tryDecodeText(val.buffer);
+          readVal = `<div class="char-value has-data" id="val-${safeId}">HEX: ${hex}${txt ? '<br>TXT: '+txt : ''}</div>`;
+          log(`    Read: ${hex}${txt ? ' | "'+txt+'"' : ''}`, 'data');
+        } catch(e) {}
+      } else {
+        readVal = `<div class="char-value" id="val-${safeId}"></div>`;
+      }
+
+      const charDiv = document.createElement('div');
+      charDiv.className = 'char-item';
+      charDiv.innerHTML = `<div class="char-uuid">${cname}: ${cuuid}</div><div class="char-props">${propsHtml}</div>${readVal}${subBtn}`;
+      charList.appendChild(charDiv);
+    }
+  }
+  log('Discovery complete. Use "Subscribe All" or individual Subscribe buttons.', 'data');
+}
+
+function tryDecodeText(buf) {
+  try {
+    const s = new TextDecoder().decode(buf);
+    if([...s].every(c => c.charCodeAt(0) >= 32 && c.charCodeAt(0) < 127)) return s;
+  } catch(e) {}
+  return null;
+}
+
+async function toggleNotify(charUuid, svcUuid, btn) {
+  try {
+    const svc = await server.getPrimaryService(svcUuid);
+    const ch = await svc.getCharacteristic(charUuid);
+    if(btn.classList.contains('active')) {
+      await ch.stopNotifications();
+      btn.classList.remove('active');
+      btn.textContent = 'Subscribe';
+    } else {
+      await ch.startNotifications();
+      ch.addEventListener('characteristicvaluechanged', (ev) => onData(charUuid, ev.target.value));
+      btn.classList.add('active');
+      btn.textContent = 'Unsubscribe';
+      log(`Subscribed to ${charUuid}`, 'data');
+    }
+  } catch(e) {
+    log('Subscribe error: ' + e.message, 'err');
+  }
+}
+
+async function subscribeAll() {
+  log('Subscribing to all notifiable characteristics...', 'warn');
+  try {
+    const services = await server.getPrimaryServices();
+    for(const svc of services) {
+      const chars = await svc.getCharacteristics();
+      for(const ch of chars) {
+        if(ch.properties.notify || ch.properties.indicate) {
+          try {
+            await ch.startNotifications();
+            ch.addEventListener('characteristicvaluechanged', (ev) => onData(ch.uuid, ev.target.value));
+            const safeId = ch.uuid.replace(/-/g,'_');
+            const btn = document.getElementById('sub-'+safeId);
+            if(btn) { btn.classList.add('active'); btn.textContent = 'Unsubscribe'; }
+            log(`Subscribed: ${ch.uuid}`, 'data');
+          } catch(e) {
+            log(`Skip ${ch.uuid}: ${e.message}`, 'warn');
+          }
+        }
+      }
+    }
+    log('All subscriptions active. Throw the disc!', 'data');
+  } catch(e) {
+    log('Subscribe all error: ' + e.message, 'err');
+  }
+}
+
+function onData(uuid, dataView) {
+  const buf = dataView.buffer;
+  const hex = bufToHex(buf);
+  const ints = bufToInts(buf);
+  const int16s = bufToInt16s(buf);
+  const floats = bufToFloat32s(buf);
+  const ts = new Date().toISOString();
+
+  const entry = { ts, uuid, bytes: buf.byteLength, hex, ints, int16s, floats };
+  logEntries.push(entry);
+  logLineCount++;
+  document.getElementById('log-count').textContent = logLineCount;
+
+  const short = uuid.substring(4,8);
+  log(`[${short}] ${hex} | bytes:${buf.byteLength}`, 'data');
+
+  tryDecode(buf, uuid);
+
+  const valEl = document.getElementById('val-' + uuid.replace(/-/g,'_'));
+  if(valEl) {
+    valEl.className = 'char-value has-data';
+    valEl.innerHTML = `HEX: ${hex}<br>INT8: ${ints}<br>INT16LE: ${int16s}<br>F32LE: ${floats}`;
+  }
+}
+
+function tryDecode(buf, uuid) {
+  if(buf.byteLength < 4) return;
+  const dv = new DataView(buf);
+  // Try common patterns: 6 float32s = speed,spin,wobble,hyzer,nose,launch
+  if(buf.byteLength >= 24) {
+    const vals = [];
+    for(let i=0;i<6;i++) vals.push(dv.getFloat32(i*4, true));
+    if(vals.every(v => isFinite(v) && v > -1000 && v < 10000)) {
+      document.getElementById('m-speed').textContent  = Math.abs(vals[0]).toFixed(1);
+      document.getElementById('m-spin').textContent   = Math.abs(vals[1]).toFixed(0);
+      document.getElementById('m-wobble').textContent = Math.abs(vals[2]).toFixed(1);
+      document.getElementById('m-hyzer').textContent  = vals[3].toFixed(1);
+      document.getElementById('m-nose').textContent   = vals[4].toFixed(1);
+      document.getElementById('m-launch').textContent = vals[5].toFixed(1);
+    }
+  }
+  // Try 6 int16s scaled: e.g. val/100 = degrees or rpm/10
+  if(buf.byteLength >= 12) {
+    const s = dv.getInt16(0, true);
+    const r = dv.getInt16(2, true);
+    if(s > 0 && s < 10000 && r > 0 && r < 50000) {
+      document.getElementById('m-speed').textContent = (s/100).toFixed(1);
+      document.getElementById('m-spin').textContent  = r.toString();
+    }
+  }
+}
+
+function onDisconnected() {
+  setStatus('error', 'Disconnected');
+  log('Device disconnected', 'err');
+  document.getElementById('btn-scan').disabled = false;
+  document.getElementById('btn-disconnect').disabled = true;
+  document.getElementById('btn-sub-all').disabled = true;
+}
+
+function disconnect() {
+  if(device && device.gatt.connected) {
+    device.gatt.disconnect();
+  }
+}
+
+function exportLog() {
+  const blob = new Blob([JSON.stringify(logEntries, null, 2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'techdisc_log_' + new Date().toISOString().slice(0,19).replace(/:/g,'-') + '.json';
+  a.click();
+}
+
+function exportCSV() {
+  const rows = [['timestamp','uuid','bytes','hex','ints','int16s','floats']];
+  for(const e of logEntries) {
+    if(e.uuid) rows.push([e.ts, e.uuid, e.bytes, e.hex, e.ints, e.int16s, e.floats]);
+  }
+  const csv = rows.map(r => r.map(v => '"'+(v||'').toString().replace(/"/g,'""')+'"').join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'techdisc_data_' + new Date().toISOString().slice(0,19).replace(/:/g,'-') + '.csv';
+  a.click();
+}
+
+function clearLog() {
+  logEntries = [];
+  logLineCount = 0;
+  document.getElementById('log-count').textContent = '0';
+  document.getElementById('log-box').innerHTML = '<div class="empty-state">Log cleared</div>';
+}
+
+if(!navigator.bluetooth) {
+  document.getElementById('ble-warning').style.display = 'block';
+  document.getElementById('btn-scan').disabled = true;
+}
+</script>
+</body>
+</html>
