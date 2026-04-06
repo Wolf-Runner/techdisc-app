@@ -241,6 +241,7 @@
 <div class="controls">
   <button class="btn btn-primary" id="btn-connect" onclick="connect()">Connect to TechDisc</button>
   <button class="btn btn-danger" id="btn-disconnect" onclick="disconnect()" disabled>Disconnect</button>
+  <button class="btn btn-secondary" id="btn-scan-all" onclick="scanAll()">&#128269; Scan All Devices (Debug)</button>
 </div>
 
 <div class="throw-count-bar">
@@ -334,6 +335,36 @@ function bufToHex(buf) {
   return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join(' ');
 }
 
+async function scanAll() {
+  if(!navigator.bluetooth) {
+    document.getElementById('ble-warning').style.display = 'block';
+    return;
+  }
+  try {
+    log('Scanning for ALL nearby BLE devices...', 'warn');
+    log('(Pick your TechDisc from the browser popup)', 'warn');
+    const d = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: [UART_SERVICE, BATT_SERVICE]
+    });
+    log(`Found device: "${d.name}" | ID: ${d.id}`, 'data');
+    log('Copy that name above — use it to update the connect filter!', 'warn');
+    // Try to connect and read battery immediately
+    setStatus('scanning', 'Connecting...');
+    server = await d.gatt.connect();
+    device = d;
+    device.addEventListener('gattserverdisconnected', onDisconnected);
+    log('Connected! Trying battery read...', 'data');
+    await readBattery();
+    await setupUART();
+    setStatus('connected', d.name);
+    document.getElementById('btn-disconnect').disabled = false;
+  } catch(e) {
+    log('Scan error: ' + e.message, 'err');
+    setStatus('error', 'Scan failed');
+  }
+}
+
 async function connect() {
   if(!navigator.bluetooth) {
     document.getElementById('ble-warning').style.display = 'block';
@@ -364,7 +395,7 @@ async function connect() {
     document.getElementById('btn-connect').textContent = 'Reconnect';
 
   } catch(e) {
-    log('Error: ' + e.message, 'err');
+    log('Error: ' + e.message + ' (' + e.name + ')', 'err');
     setStatus('error', 'Connection failed');
     document.getElementById('btn-connect').disabled = false;
   }
